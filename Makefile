@@ -1,5 +1,5 @@
 CCC = gcc
-CFLAGS = -Iinclude -Wall -g
+CFLAGS = -Iinclude -Wall -g -pthread
 SRCDIR = src
 OBJDIR = build
 BIN = wiz
