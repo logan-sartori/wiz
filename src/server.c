@@ -1,98 +1,158 @@
 #include "server.h"
-#include <stdio.h>
+#include "network.h"
+#include "game.h"
+#include "debug.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <netdb.h>
-#include <unistd.h>
 #include <arpa/inet.h>
 #include <pthread.h>
-
 #include <stdbool.h>
+#include <time.h>
+#include <unistd.h>
 
-int server_init(server_t *server) {
-    const int fd = socket(PF_INET, SOCK_STREAM, 0);
+int server_init(Server *server) {
+    const int sock = socket(PF_INET, SOCK_STREAM, 0);
 
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = INADDR_ANY;
 
-    if (bind(fd, (struct sockaddr *) &addr, sizeof(addr))) {
-        perror("Bind error:");
+    if (bind(sock, (struct sockaddr *) &addr, sizeof(addr))) {
+        perror("Bind error");
         return -1;
     }
 
     socklen_t addr_len = sizeof(addr);
-    getsockname(fd, (struct sockaddr *) &addr, &addr_len);
+    getsockname(sock, (struct sockaddr *) &addr, &addr_len);
     printf("# Server running on port: %d\n", (int) ntohs(addr.sin_port));
 
-    if (listen(fd, MAX_CLIENTS)) {
+    if (listen(sock, MAX_CLIENTS)) {
         perror("# Listen error:");
         return -1;
     }
 
-    server->fd = fd;
+    server->sock = sock;
     server->quit = false;
     server->num_clients = 0;
+    server->state = malloc(sizeof(GameState));
+    pthread_mutex_init(&server->mutex, NULL);
+
+    game_init(server->state);
 
     return 0;
 }
 
 void *handle_client(void *arg) {
-    int client_fd = *(int *) arg;
-    char buf[256];
+    HandleClientArgs *args = (HandleClientArgs *) arg;
+    // Server *server = args->server;
+    ServerClient *client = args->client;
+
+    uint8_t buffer[256];
     int nbytes;
 
-    while ((nbytes = recv(client_fd, &buf, sizeof(buf), 0)) > 0) {
-        printf("%s\n", buf);
+    while ((nbytes = recv(client->sock, &buffer, sizeof(buffer), 0)) > 0) {
+        printf("%s\n", buffer);
+        // deserialize into packet
+        // packet -> command? state?
+        // tell server to update this client's player
     }
+
+    close(client->sock);
 
     return NULL;
 }
 
-void server_broadcast(server_t *server, int tick) {
-    char buf[32];
-    snprintf(buf, sizeof(buf), "Gametick: %d", tick);
+void server_broadcast(Server *server, const Packet *packet) {
+    uint8_t buffer[MAX_BUFFER_SIZE];
+    size_t buffer_size = serialize_packet(buffer, MAX_BUFFER_SIZE, packet);
+
     for (int i = 0; i < server->num_clients; i++) {
-        server_client_t *client = server->clients[i];
-        send(client->fd, &buf, sizeof(buf), 0);
+        ServerClient *client = server->clients[i];
+        if (client != NULL) {
+            send(client->sock, buffer, buffer_size, 0);
+        }
     }
 }
 
-void *game_loop(void *arg) {
-    server_t *server = (server_t *) arg;
+void server_export_state(Server *server) {
+    Packet state_packet;
+    packet_init(&state_packet, server->state);
+    debug_state_packet(&state_packet);
+    server_broadcast(server, &state_packet);
+}
 
-    int tick = 0;
+void *game_loop(void *arg) {
+    Server *server = (Server *) arg;
+    // struct timespec req = {0, TICK_DURATION_NS};
 
     while (!server->quit) {
-        tick++;
-
-        server_broadcast(server, tick);
-
+        pthread_mutex_lock(&server->mutex);
+        game_tick(server->state);
+        server_export_state(server);
+        // nanosleep(&req, NULL);
+        pthread_mutex_unlock(&server->mutex);
         sleep(1);
     }
 
     return NULL;
 }
 
-int server_start(server_t *server) {
-    pthread_t loop_thread;
-    pthread_create(&loop_thread, NULL, game_loop, server);
+ServerClient *get_client_by_id(Server *server, int client_id) {
+    ServerClient *to_return = NULL;
+
+    for (int i = 0; i < server->num_clients; i++) {
+        if (server->clients[i]->id == client_id) {
+            return server->clients[i];
+        }
+    }
+
+    return to_return;
+}
+
+int server_start(Server *server) {
+    pthread_t game_thread;
+    pthread_create(&game_thread, NULL, game_loop, server);
 
     while (1) {
-        pthread_t thread;
-        int client_fd = accept(server->fd, (struct sockaddr *) NULL, NULL);
-        printf("# Accepted client\n");
+        pthread_mutex_lock(&server->mutex);
 
-        server_client_t *new_client = malloc(sizeof(server_client_t));
+        if (server->num_clients == MAX_CLIENTS) {
+            pthread_mutex_unlock(&server->mutex);
+            continue;
+        }
 
-        new_client->fd = client_fd;
-        new_client->id = server->num_clients;
+        pthread_mutex_unlock(&server->mutex);
+
+        int client_sock = accept(server->sock, (struct sockaddr *) NULL, NULL);
+
+        printf("# CLIENT_SOCK = %d\n", client_sock);
+
+
+        ServerClient *new_client = malloc(sizeof(ServerClient));
+        new_client->sock = client_sock;
+        new_client->id = server->num_clients++;
+
+        pthread_mutex_lock(&server->mutex);
+
         server->clients[server->num_clients] = new_client;
         server->num_clients++;
 
-        pthread_create(&thread, NULL, handle_client, (void *)new_client);
+        game_add_player(server->state, new_client->id);
+
+        pthread_mutex_unlock(&server->mutex);
+
+        HandleClientArgs *args = malloc(sizeof(HandleClientArgs));
+        args->server = server;
+        args->client = new_client;
+
+        pthread_t client_thread;
+        pthread_create(&client_thread, NULL, handle_client, (void *) args);
     }
+
+    pthread_join(game_thread, NULL);
 
     return 0;
 }

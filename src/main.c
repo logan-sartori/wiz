@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
         client_init(&client, port);
         client_start(&client);
     } else {
-        server_t server;
+        Server server;
         server_init(&server);
         server_start(&server);
     }

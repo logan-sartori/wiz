@@ -2,7 +2,7 @@
 #define CLIENT_H
 
 typedef struct client_t {
-    int fd;
+    int sock;
 } client_t;
 
 int client_init(client_t *client, int port);
