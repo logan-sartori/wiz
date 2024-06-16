@@ -1,19 +1,15 @@
 #include "game.h"
+#include "globals.h"
+
 #include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdlib.h>
 
-void game_init(GameState *game) {
-    game->tick = 0;
-    Level level = { .bounds = { 0, 0, LEVEL_WIDTH, LEVEL_HEIGHT }};
-    game->level = level;
-    game->player_count = 0;
+void game_init(Game *game) {
 }
 
-void game_tick(GameState *game) {
-    game->tick++;
-    printf("[GameState] %d\n", game->tick);
+void game_tick(Game *game) {
 }
 
 Player *game_create_player(const uint8_t id) {
@@ -41,28 +37,8 @@ Player *game_create_player(const uint8_t id) {
     return player;
 }
 
-void game_add_player(GameState *game, const uint8_t id) {
-    if (game->player_count == MAX_PLAYERS) {
-        return;
-    }
-
-    for (int i = 0; i < MAX_PLAYERS; i++) {
-        if (game->players[i] == NULL) {
-            game->players[i] = game_create_player(id);
-            game->player_count++;
-            break;
-        }
-    }
+void game_add_player(Game *game, const uint8_t id) {
 }
 
-void game_remove_player(GameState *state, uint8_t id) {
-    for (int i = 0; i < MAX_PLAYERS; i++) {
-        if (state->players[i]->id == id) {
-            if (state->players[i] != NULL) {
-                free(state->players[i]);
-                state->players[i] = NULL;
-                break;
-            }
-        }
-    }
+void game_remove_player(Game *state, uint8_t id) {
 }

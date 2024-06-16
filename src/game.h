@@ -1,13 +1,15 @@
 #ifndef GAME_H
 #define GAME_H
 
+#include "globals.h"
+
 #include <stdint.h>
 #include <stdbool.h>
 
-#define MAX_PLAYERS 10
 #define LEVEL_WIDTH 255
 #define LEVEL_HEIGHT 255
 #define EMPTY 16 
+#define TICK_DURATION_NS 7810000
 
 typedef enum {
     GAME_OBJECT_PLAYER,
@@ -44,15 +46,21 @@ typedef struct {
 
 typedef struct {
     uint32_t tick;
-    Player *players[MAX_PLAYERS];
     uint8_t player_count;
     Level level;
 } GameState;
 
-void game_init(GameState *state);
-void update_game(GameState *state, const uint8_t action);
-void game_tick(GameState *state);
-void game_add_player(GameState *state, uint8_t id);
-void game_remove_player(GameState *state, uint8_t id);
+typedef struct {
+    GameState *state;
+    // TODO Queue player_actions;
+    bool running;
+} Game;
+
+void game_init(Game *game);
+void game_tick(Game *game);
+void game_start(Game *game);
+
+void game_add_player(Game *state, uint8_t id);
+void game_remove_player(Game *state, uint8_t id);
 
 #endif // GAME_H

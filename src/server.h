@@ -2,21 +2,12 @@
 #define SERVER_H
 
 #include "pthread.h"
+#include "globals.h"
 #include "game.h"
 
 #include <stdint.h>
 #include <stdbool.h>
 
-#define MAX_CLIENTS 10
-#define TICK_DURATION_NS 7810000
-
-#define ASSERT(condition) \
-    do { \
-        if (!(condition)) { \
-            fprintf(stderr, "Assertion failed: %s, file %s, line %d\n", #condition, __FILE__, __LINE__); \
-            abort(); \
-        } \
-    } while (0)
 
 typedef struct {
     int sock;
@@ -24,12 +15,14 @@ typedef struct {
 } ServerClient; 
 
 typedef struct {
-    ServerClient *clients[MAX_CLIENTS];
-    GameState *state;
-    int num_clients;
-    pthread_mutex_t mutex;
     int sock;
-    bool quit;
+    ServerClient *clients[MAX_CLIENTS];
+    int client_count;
+
+    Game *game;
+
+    pthread_mutex_t mutex;
+    bool running;
 } Server;
 
 typedef struct {

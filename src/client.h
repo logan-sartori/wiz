@@ -1,11 +1,11 @@
 #ifndef CLIENT_H
 #define CLIENT_H
 
-typedef struct client_t {
+typedef struct {
     int sock;
-} client_t;
+} Client;
 
-int client_init(client_t *client, int port);
-void client_start(client_t *client);
+int client_init(Client *client, int port);
+void client_start(Client *client);
 
 #endif

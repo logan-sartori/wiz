@@ -2,7 +2,8 @@ CCC = gcc
 CFLAGS = -Iinclude -Wall -g -pthread
 SRCDIR = src
 OBJDIR = build
-BIN = wiz
+BIN = wizard
+LIBS = `sdl2-config --cflags --libs`
 
 SOURCES := $(shell find $(SRCDIR) -name '*.c')
 OBJECTS := $(patsubst $(SRCDIR)/%.c, $(OBJDIR)/%.o, $(SOURCES))
@@ -11,8 +12,8 @@ OBJECTS := $(patsubst $(SRCDIR)/%.c, $(OBJDIR)/%.o, $(SOURCES))
 all: $(BIN)
 
 # Link all object files to create the final executable
-wiz: $(OBJECTS)
-	$(CC) $(OBJECTS) -o $(BIN)
+wizard: $(OBJECTS)
+	$(CC) $(OBJECTS) -o $(BIN) $(LIBS)
 
 # Compile each source file to an object file
 $(OBJDIR)/%.o: $(SRCDIR)/%.c

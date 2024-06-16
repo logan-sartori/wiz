@@ -1,33 +1,39 @@
-#include <stdio.h>
 #include <string.h>
-
-#include <sys/socket.h>
-#include <netdb.h>
-#include <unistd.h>
-#include <arpa/inet.h>
+#include <stdlib.h>
+#include <stdio.h>
 
 #include "server.h"
 #include "client.h"
 
-int main(int argc, char **argv) {
-    if (argc > 1 && !strcmp(argv[1], "client")) {
-        if (argc != 3) {
-            fprintf(stderr, "not enough args!");
-            return -1;
+typedef enum {
+    MODE_CLIENT,
+    MODE_SERVER
+} ServerMode;
+
+int main(int argc, char *argv[]) {
+    int port, status = 0;
+    int mode = MODE_SERVER;
+
+    for (int i = 0; i < argc; i++) {
+        if (strcmp(argv[i], "-c") == 0) {
+            mode = MODE_CLIENT;
+            port = atoi(argv[i + 1]);
         }
+    }
 
-        int port;
-        sscanf(argv[2], "%d", &port);
-
-        // CLIENT MODE
-        client_t client;
-        client_init(&client, port);
+    if (mode == MODE_CLIENT) {
+        Client client;
+        if (client_init(&client, port)) {
+            perror("# Error initializing client");
+        }
         client_start(&client);
     } else {
         Server server;
-        server_init(&server);
+        if (server_init(&server)) {
+            perror("# Error initializing server");
+        }
         server_start(&server);
     }
 
-    return 0;
+    return status;
 }
