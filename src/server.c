@@ -79,6 +79,7 @@ static ServerClient *get_client_by_id(Server *server, int client_id) {
 
 static void *server_handle_client(void *arg) {
     HandleClientArgs *args = (HandleClientArgs *) arg;
+
     Server *server = args->server;
     ServerClient *client = args->client;
 
@@ -89,16 +90,22 @@ static void *server_handle_client(void *arg) {
         // TODO
     }
 
+    close(client->sock);
+
     /* Disconnect */
     for (int i = 0; i < MAX_CLIENTS; i++) {
-        if (server->clients[i] == NULL) {
+
+        ServerClient *curr_client = server->clients[i];
+
+        if (curr_client == NULL) {
             continue;
         }
 
-        if (server->clients[i]->id == client->id) {
-            close(server->clients[i]->sock);
-            free(server->clients[i]);
-            server->clients[i] = NULL;
+        if (curr_client->id == client->id) {
+            game_remove_player(server->game, client->id);
+            free(curr_client);
+            curr_client = NULL;
+            server->client_count--;
         }
     }
 
@@ -106,9 +113,24 @@ static void *server_handle_client(void *arg) {
 
 }
 
+void server_add_client(Server *server, ServerClient *client) {
+    pthread_mutex_lock(&server->mutex);
+
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        ServerClient *curr_client = server->clients[i];
+
+        if (curr_client == NULL) {
+            curr_client = client;
+            server->client_count++;
+        }
+    }
+
+    pthread_mutex_unlock(&server->mutex);
+}
+
 int server_start(Server *server) {
     server->running = true;
-    // game_start(server->game);
+    game_start(server->game);
 
     while (server->running) {
         pthread_mutex_lock(&server->mutex);
@@ -124,22 +146,17 @@ int server_start(Server *server) {
 
         ServerClient *new_client = malloc(sizeof(ServerClient));
         new_client->sock = client_sock;
-        new_client->id = server->client_count++;
+        new_client->id = server->client_count + 1;
 
-        pthread_mutex_lock(&server->mutex);
+        server_add_client(server, new_client);
+        game_add_player(server->game,  new_client->id);
 
-        server->clients[server->client_count] = new_client;
-        server->client_count++;
-
-        pthread_mutex_unlock(&server->mutex);
-
-        HandleClientArgs args = {
-            .server = server,
-            .client = new_client,
-        };
+        HandleClientArgs *args = malloc(sizeof(HandleClientArgs));
+        args->server = server;
+        args->client = new_client;
 
         pthread_t client_thread;
-        pthread_create(&client_thread, NULL, server_handle_client, (void *) &args);
+        pthread_create(&client_thread, NULL, server_handle_client, (void *) args);
     }
 
     return 0;

@@ -35,9 +35,8 @@ typedef struct {
 
 typedef struct {
     uint8_t id;
-    bool active;
     Position pos;
-    GameObject game_object;
+    // GameObject game_object;
 } Player;
 
 typedef struct {
@@ -47,6 +46,7 @@ typedef struct {
 typedef struct {
     uint32_t tick;
     uint8_t player_count;
+    Player *players[MAX_CLIENTS];
     Level level;
 } GameState;
 
