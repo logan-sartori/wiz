@@ -5,11 +5,13 @@
 
 #include "server.h"
 #include "client.h"
+#include "game.h"
 
-typedef enum {
-    MODE_CLIENT,
-    MODE_SERVER
-} ServerMode;
+void *handle_game(void *args) {
+    Game *game = (Game *) args;
+    game_start(game);
+    return NULL;
+}
 
 void *handle_server(void *args) {
     Server *server = (Server *) args;
@@ -17,33 +19,53 @@ void *handle_server(void *args) {
     return NULL;
 }
 
-void *handle_client(void *args) {
-    Client *client = (Client *) args;
-    client_start(client);
-    return NULL;
-}
-
 int main(int argc, char *argv[]) {
     int status = 0;
 
-    Server server;
-    Client client;
+    Server *server;
+    Game *game;
+    Client *client;
 
-    pthread_t server_thread, client_thread;
+    if (argc > 1 && strcmp(argv[1], "-c") == 0) {
+        client = calloc(1, sizeof(Client));
+        if (client_init(client, 8000)) {
+            perror("# Error initializing client");
+        }
+        client_start(client);
+        free(client);
+        return status;
+    }
 
-    if (server_init(&server)) {
+    server = calloc(1, sizeof(Server));
+    game = calloc(1, sizeof(Game));
+    client = calloc(1, sizeof(Client));
+
+    game_init(game, server);
+
+    if (server_init(server, game)) {
         perror("# Error initializing server");
     }
 
-    if (client_init(&client, 8000)) {
-        perror("# Error initializing client");
+    if (client_init(client, 8000)) {
+        perror("# Error connecting to server");
     }
 
-    pthread_create(&server_thread, NULL, handle_server, &server);
-    pthread_create(&client_thread, NULL, handle_client, &client);
+    pthread_t game_thread, server_thread;
+    pthread_create(&server_thread, NULL, handle_server, server);
+    pthread_create(&game_thread, NULL, handle_game, game);
 
+    client_start(client);
+
+    pthread_join(game_thread, NULL);
     pthread_join(server_thread, NULL);
-    pthread_join(client_thread, NULL);
+
+    server->running = false;
+    game->running = false;
+
+    free(server);
+    free(game);
+    free(client);
 
     return status;
+
 }

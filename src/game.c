@@ -1,65 +1,79 @@
 #include "game.h"
 #include "globals.h"
+#include "network.h"
+#include "server.h"
 
 #include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
-void game_state_init(GameState *state) {
+static void game_state_init(GameState *state) {
     state->tick = 0;
     state->player_count = 0;
-
-    Level level = {
-        .bounds = {
-            .x = 0,
-            .y = 0,
-            .width = LEVEL_WIDTH,
-            .height = LEVEL_HEIGHT,
-        }
-    };
-
-    state->level = level;
 }
 
-void game_init(Game *game) {
+void game_init(Game *game, struct Server *server) {
     game->running = false; 
-    game->state = malloc(sizeof(GameState));
+    game->state = calloc(1, sizeof(GameState));
+    game->server = server;
     game_state_init(game->state);
 }
 
-void game_tick(Game *game) {
+static void game_export_state(Game *game) {
+
+    if (game->state->player_count == 0) {
+        return;
+    }
+
+    Packet packet;
+    packet.type = PT_GAME_UPDATE;
+
+    GameUpdate update;
+    update.tick = game->state->tick;
+    update.player_count = game->state->player_count;
+    update.players = calloc(update.player_count, sizeof(Player));
+
+    for (int i = 0; i < update.player_count; i++) {
+        memcpy(&update.players[i], game->state->players[i], sizeof(Player));
+    }
+
+    server_broadcast(game->server, &packet);
+    free(update.players);
+}
+
+static void game_tick(Game *game) {
     GameState *state = game->state;
     state->tick++;
+    game_export_state(game);
 }
 
 void game_start(Game *game) {
+    struct timespec req, rem = { 0 };
+    req.tv_nsec = TICK_DELAY;
+
+    game->running = true;
+
+    printf("[game] Started\n");
+
     while(game->running) {
         game_tick(game);
+        nanosleep(&req, &rem);
     }
 }
 
-Player *game_create_player(const uint8_t id) {
-    Player *player = malloc(sizeof(Player));
+static Player *game_create_player(const uint8_t id) {
+    Player *player = calloc(1, sizeof(Player));
 
     Position pos = {
         .x = LEVEL_WIDTH / 2,
         .y = LEVEL_HEIGHT / 2,
     };
 
-    GameObject obj = {
-        .type = GAME_OBJECT_PLAYER,
-        .hit_box = {
-            .x = 0,
-            .y = 0,
-            .width = 1,
-            .height = 1,
-        }
-    };
-
     player->id = id;
     player->pos = pos;
-    // player->game_object = obj;
 
     return player;
 }
@@ -73,8 +87,10 @@ void game_add_player(Game *game, const uint8_t id) {
         if (game->state->players[i] == NULL) {
             game->state->players[i] = game_create_player(id);
             game->state->player_count++;
+            break;
         }
     }
+    printf("[game] player_count = %d\n", game->state->player_count);
 }
 
 void game_remove_player(Game *game, uint8_t id) {

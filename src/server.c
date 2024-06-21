@@ -1,14 +1,17 @@
 #include "server.h"
-#include "game.h"
+#include "network.h"
+#include "buffer.h"
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <stdbool.h>
 #include <unistd.h>
 
-int server_init(Server *server) {
+int server_init(Server *server, Game *game) {
+    memset(server, 0, sizeof(Server));
     const int sock = socket(PF_INET, SOCK_STREAM, 0);
 
     if (sock < 0) {
@@ -34,7 +37,6 @@ int server_init(Server *server) {
 
     socklen_t addr_len = sizeof(addr);
     getsockname(sock, (struct sockaddr *) &addr, &addr_len);
-    printf("# Server running on port: %d\n", (int) ntohs(addr.sin_port));
 
     if (listen(sock, MAX_CLIENTS)) {
         perror("# Listen error");
@@ -44,9 +46,7 @@ int server_init(Server *server) {
     server->sock = sock;
     server->running = false;
     server->client_count = 0;
-    server->game = malloc(sizeof(Game));
-
-    game_init(server->game);
+    server->game = game;
 
     pthread_mutex_init(&server->mutex, NULL);
 
@@ -54,27 +54,18 @@ int server_init(Server *server) {
 }
 
 
-static void server_broadcast(Server *server) {
-    uint8_t buffer[MAX_BUFFER_SIZE];
+void server_broadcast(Server *server, Packet *packet) {
+    Buffer *buf = buffer_init(64);
+    serialize_packet(buf, packet);
 
     for (int i = 0; i < server->client_count; i++) {
         ServerClient *client = server->clients[i];
         if (client != NULL) {
-            // send(client->sock, buffer, buffer_size, 0);
-        }
-    }
-}
-
-static ServerClient *get_client_by_id(Server *server, int client_id) {
-    ServerClient *to_return = NULL;
-
-    for (int i = 0; i < server->client_count; i++) {
-        if (server->clients[i]->id == client_id) {
-            return server->clients[i];
+            send(client->sock, buf->data, buf->size, 0);
         }
     }
 
-    return to_return;
+    buffer_free(buf);
 }
 
 static void *server_handle_client(void *arg) {
@@ -102,13 +93,13 @@ static void *server_handle_client(void *arg) {
         }
 
         if (curr_client->id == client->id) {
-            game_remove_player(server->game, client->id);
             free(curr_client);
             curr_client = NULL;
             server->client_count--;
         }
     }
 
+    free(args);
     return NULL;
 
 }
@@ -118,10 +109,10 @@ void server_add_client(Server *server, ServerClient *client) {
 
     for (int i = 0; i < MAX_CLIENTS; i++) {
         ServerClient *curr_client = server->clients[i];
-
         if (curr_client == NULL) {
             curr_client = client;
             server->client_count++;
+            break;
         }
     }
 
@@ -130,26 +121,26 @@ void server_add_client(Server *server, ServerClient *client) {
 
 int server_start(Server *server) {
     server->running = true;
-    game_start(server->game);
+
+    printf("[server] Started\n");
 
     while (server->running) {
         pthread_mutex_lock(&server->mutex);
-
         if (server->client_count == MAX_CLIENTS) {
             pthread_mutex_unlock(&server->mutex);
             continue;
         }
-
         pthread_mutex_unlock(&server->mutex);
 
         int client_sock = accept(server->sock, (struct sockaddr *) NULL, NULL);
 
-        ServerClient *new_client = malloc(sizeof(ServerClient));
+        ServerClient *new_client = calloc(1, sizeof(ServerClient));
         new_client->sock = client_sock;
         new_client->id = server->client_count + 1;
 
         server_add_client(server, new_client);
-        game_add_player(server->game,  new_client->id);
+
+        game_add_player(server->game, new_client->id);
 
         HandleClientArgs *args = malloc(sizeof(HandleClientArgs));
         args->server = server;

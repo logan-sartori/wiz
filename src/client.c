@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <SDL2/SDL.h>
 #include <stdbool.h>
+#include <pthread.h>
 
 int client_init(Client *client, int port) {
     int sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -24,12 +25,10 @@ int client_init(Client *client, int port) {
     return 0;
 }
 
-static int client_run() {
-    int status = 0;
-
+void *client_run(void *args) {
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         fprintf(stderr, "SDL_Init Error: %s\n", SDL_GetError());
-        return 1;
+        return NULL;
     }
 
     SDL_Window *window = SDL_CreateWindow("WIZARD", SDL_WINDOWPOS_UNDEFINED,
@@ -38,7 +37,7 @@ static int client_run() {
     if (window == NULL) {
         fprintf(stderr, "SDL_CreateWindow Error: %s\n", SDL_GetError());
         SDL_Quit();
-        return 1;
+        return NULL;
     }
 
     SDL_Event event;
@@ -62,18 +61,23 @@ static int client_run() {
     SDL_DestroyWindow(window);
     SDL_Quit();
 
-    return status;
+    return NULL;
 }
 
 void client_start(Client *client) {
     size_t nbytes;
     uint8_t buffer[MAX_BUFFER_SIZE];
 
-    client_run();
+    printf("[client] Started\n");
+
+    pthread_t gui_thread;
+    pthread_create(&gui_thread, NULL, client_run, NULL);
 
     /* Handle messages */
     while ((nbytes = recv(client->sock, buffer, sizeof(buffer), 0)) > 0) {
-
+        if (nbytes > -1) {
+            printf("[bytes] = %d\n", (int) nbytes);
+        }
     }
 
     close(client->sock);

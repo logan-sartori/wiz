@@ -3,26 +3,25 @@
 
 #include "pthread.h"
 #include "globals.h"
-#include "game.h"
+#include "network.h"
 
 #include <stdint.h>
 #include <stdbool.h>
 
+struct Game;
 
 typedef struct {
     int sock;
     int id;
 } ServerClient; 
 
-typedef struct {
+typedef struct Server{
     int sock;
     ServerClient *clients[MAX_CLIENTS];
     int client_count;
-
-    Game *game;
-
     pthread_mutex_t mutex;
     bool running;
+    struct Game *game;
 } Server;
 
 typedef struct {
@@ -30,7 +29,8 @@ typedef struct {
     Server *server;
 } HandleClientArgs;
 
-int server_init(Server *server);
+int server_init(Server *server, struct Game *game);
 int server_start(Server *server);
+void server_broadcast(Server *server, Packet *packet);
 
 #endif // SERVER_H
